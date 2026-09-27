@@ -6,7 +6,6 @@ import os
 
 app = FastAPI(title="Radamn Engine Core", version="2.0")
 
-# Libera o acesso para qualquer interface (Web, App, etc.)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,10 +20,15 @@ class ChatPayload(BaseModel):
     image_url: str = None
 
 MODEL_NAME = "LuffyNox/radamn-ai-v1"
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 @app.get("/")
 def status():
-    return {"status": "Online", "engine": "Radamn AI Core v2.0", "limit_cpu": False}
+    return {
+        "status": "Online", 
+        "engine": "Radamn AI Core v2.0", 
+        "custom_api_active": bool(HF_TOKEN)
+    }
 
 @app.post("/api/chat")
 async def process_chat(payload: ChatPayload):
@@ -47,23 +51,44 @@ async def process_chat(payload: ChatPayload):
         full_prompt = f"[Imagem para análise: {payload.image_url}]\nPergunta: {prompt}"
 
     # 3. Chamada ao Modelo LuffyNox
+    headers = {}
+    if HF_TOKEN:
+        headers["Authorization"] = f"Bearer {HF_TOKEN}"
+
     try:
         hf_response = requests.post(
             f"https://api-inference.huggingface.co/models/{MODEL_NAME}",
+            headers=headers,
             json={"inputs": full_prompt},
             timeout=30
         )
         data = hf_response.json()
         
         reply = ""
-        if isinstance(data, list) and len(data) > 0 and "generated_text" in data[0]:
-            reply = data[0]["generated_text"]
-        elif isinstance(data, dict) and "generated_text" in data:
-            reply = data["generated_text"]
-        elif isinstance(data, dict) and "error" in data:
-            reply = f"⚠️ Aviso do Modelo: {data['error']}"
+        
+        # Tratamento robusto para extrair o texto de qualquer formato do HF
+        if isinstance(data, list) and len(data) > 0:
+            item = data[0]
+            if isinstance(item, dict):
+                reply = item.get("generated_text") or item.get("summary_text") or item.get("translation_text") or str(item)
+            else:
+                reply = str(item)
+        elif isinstance(data, dict):
+            if "generated_text" in data:
+                reply = data["generated_text"]
+            elif "error" in data:
+                reply = f"⚠️ Aviso do Modelo: {data['error']}"
+            else:
+                reply = str(data)
         else:
-            reply = "Mensagem processada pelo motor Radamn AI."
+            reply = str(data)
+
+        # Remove o prompt enviado caso o modelo o repita na resposta
+        if reply.startswith(full_prompt):
+            reply = reply[len(full_prompt):].strip()
+
+        if not reply:
+            reply = "Recebi sua mensagem, mas não consegui gerar uma resposta em texto."
 
         return {
             "status": "success",
@@ -72,5 +97,9 @@ async def process_chat(payload: ChatPayload):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
-      
+        return {
+            "status": "error",
+            "type": "text",
+            "response": f"⚠️ Erro ao processar resposta: {str(e)}"
+        }
+        
