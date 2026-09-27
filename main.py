@@ -45,61 +45,71 @@ async def process_chat(payload: ChatPayload):
             "media_url": img_url
         }
 
-    # 2. Suporte à Visão Multimodal
+    # 2. Suporte a Prompt de Texto
     full_prompt = prompt
     if payload.image_url:
         full_prompt = f"[Imagem para análise: {payload.image_url}]\nPergunta: {prompt}"
 
-    # 3. Chamada ao Modelo LuffyNox
     headers = {}
     if HF_TOKEN:
         headers["Authorization"] = f"Bearer {HF_TOKEN}"
 
-    try:
-        hf_response = requests.post(
-            f"https://api-inference.huggingface.co/models/{MODEL_NAME}",
-            headers=headers,
-            json={"inputs": full_prompt},
-            timeout=30
-        )
-        data = hf_response.json()
-        
-        reply = ""
-        
-        # Tratamento robusto para extrair o texto de qualquer formato do HF
-        if isinstance(data, list) and len(data) > 0:
-            item = data[0]
-            if isinstance(item, dict):
-                reply = item.get("generated_text") or item.get("summary_text") or item.get("translation_text") or str(item)
+    # URL atualizado da Router API do Hugging Face
+    endpoints = [
+        f"https://router.huggingface.co/hf-inference/v1/models/{MODEL_NAME}",
+        f"https://api-inference.huggingface.co/models/{MODEL_NAME}"
+    ]
+
+    response_data = None
+    last_error = None
+
+    for url in endpoints:
+        try:
+            hf_response = requests.post(
+                url,
+                headers=headers,
+                json={"inputs": full_prompt},
+                timeout=25
+            )
+            if hf_response.status_code == 200:
+                response_data = hf_response.json()
+                break
             else:
-                reply = str(item)
-        elif isinstance(data, dict):
-            if "generated_text" in data:
-                reply = data["generated_text"]
-            elif "error" in data:
-                reply = f"⚠️ Aviso do Modelo: {data['error']}"
-            else:
-                reply = str(data)
-        else:
-            reply = str(data)
+                last_error = f"Status {hf_response.status_code}: {hf_response.text}"
+        except Exception as err:
+            last_error = str(err)
 
-        # Remove o prompt enviado caso o modelo o repita na resposta
-        if reply.startswith(full_prompt):
-            reply = reply[len(full_prompt):].strip()
-
-        if not reply:
-            reply = "Recebi sua mensagem, mas não consegui gerar uma resposta em texto."
-
-        return {
-            "status": "success",
-            "type": "text",
-            "response": reply
-        }
-
-    except Exception as e:
+    if not response_data:
         return {
             "status": "error",
             "type": "text",
-            "response": f"⚠️ Erro ao processar resposta: {str(e)}"
+            "response": f"⚠️ Não foi possível comunicar com o modelo no Hugging Face. Detalhes: {last_error}"
         }
-        
+
+    reply = ""
+    if isinstance(response_data, list) and len(response_data) > 0:
+        item = response_data[0]
+        if isinstance(item, dict):
+            reply = item.get("generated_text") or item.get("summary_text") or str(item)
+        else:
+            reply = str(item)
+    elif isinstance(response_data, dict):
+        if "generated_text" in response_data:
+            reply = response_data["generated_text"]
+        elif "error" in response_data:
+            reply = f"⚠️ Aviso do Modelo: {response_data['error']}"
+        else:
+            reply = str(response_data)
+
+    if reply.startswith(full_prompt):
+        reply = reply[len(full_prompt):].strip()
+
+    if not reply:
+        reply = "Recebi sua mensagem, mas não consegui gerar uma resposta em texto."
+
+    return {
+        "status": "success",
+        "type": "text",
+        "response": reply
+    }
+    
