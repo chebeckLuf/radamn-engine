@@ -45,36 +45,51 @@ async def process_chat(payload: ChatPayload):
             "media_url": img_url
         }
 
-    # 2. Resposta via Router API da Hugging Face (Formato OpenAI / Chat Completions)
+    # 2. Chamada direta ao modelo no Hugging Face (Router API)
     headers = {"Content-Type": "application/json"}
     if HF_TOKEN:
         headers["Authorization"] = f"Bearer {HF_TOKEN}"
 
-    # Tenta primeiro a Serverless Router API oficial (OpenAI compatible format)
-    router_url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
-    router_payload = {
+    # Endpoint oficial de Router da HF (OpenAI Chat Format)
+    url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
+    body = {
         "model": MODEL_NAME,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 500
+        "max_tokens": 300
     }
 
     try:
-        res = requests.post(router_url, headers=headers, json=router_payload, timeout=25)
+        res = requests.post(url, headers=headers, json=body, timeout=40)
+        
         if res.status_code == 200:
             data = res.json()
             reply = data["choices"][0]["message"]["content"]
             return {"status": "success", "type": "text", "response": reply}
-    except Exception:
-        pass
+        
+        # Caso o modelo esteja a carregar (503) ou indisponível na HF Router API:
+        elif res.status_code in [503, 404]:
+            return {
+                "status": "success", 
+                "type": "text", 
+                "response": f"O modelo `{MODEL_NAME}` está a inicializar nos servidores da Hugging Face. Por favor, tenta enviar a mensagem novamente em 20 segundos!"
+            }
+        else:
+            return {
+                "status": "error",
+                "type": "text",
+                "response": f"⚠️ Erro no servidor Hugging Face ({res.status_code}): {res.text}"
+            }
 
-    # 3. Fallback: Se o modelo específico não estiver carregado na HF Serverless, responde via IA pública rápida
-    try:
-        poll_url = f"https://text.pollinations.ai/{requests.utils.quote(prompt)}"
-        fallback_res = requests.get(poll_url, timeout=15)
-        if fallback_res.status_code == 200 and fallback_res.text.strip():
-            return {"status": "success", "type": "text", "response": fallback_res.text.strip()}
-    except Exception as err:
-        return {"status": "error", "type": "text", "response": f"⚠️ Erro ao gerar resposta: {str(err)}"}
-
-    return {"status": "error", "type": "text", "response": "⚠️ Não foi possível obter resposta no momento."}
-    
+    except requests.exceptions.Timeout:
+        return {
+            "status": "error",
+            "type": "text",
+            "response": "⚠️ O modelo demorou para responder. Tente novamente!"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "type": "text",
+            "response": f"⚠️ Erro na requisição: {str(e)}"
+        }
+        
