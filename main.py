@@ -34,7 +34,7 @@ def status():
 async def process_chat(payload: ChatPayload):
     prompt = payload.message.strip()
     
-    # 1. Comando de Geração de Imagem HD (Flux)
+    # 1. Geração de Imagem HD (Flux)
     if prompt.lower().startswith("crie uma imagem") or prompt.lower().startswith("gerar imagem"):
         prompt_encoded = requests.utils.quote(prompt)
         img_url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&model=flux&nologo=true"
@@ -45,71 +45,36 @@ async def process_chat(payload: ChatPayload):
             "media_url": img_url
         }
 
-    # 2. Suporte a Prompt de Texto
-    full_prompt = prompt
-    if payload.image_url:
-        full_prompt = f"[Imagem para análise: {payload.image_url}]\nPergunta: {prompt}"
-
-    headers = {}
+    # 2. Resposta via Router API da Hugging Face (Formato OpenAI / Chat Completions)
+    headers = {"Content-Type": "application/json"}
     if HF_TOKEN:
         headers["Authorization"] = f"Bearer {HF_TOKEN}"
 
-    # URL atualizado da Router API do Hugging Face
-    endpoints = [
-        f"https://router.huggingface.co/hf-inference/v1/models/{MODEL_NAME}",
-        f"https://api-inference.huggingface.co/models/{MODEL_NAME}"
-    ]
-
-    response_data = None
-    last_error = None
-
-    for url in endpoints:
-        try:
-            hf_response = requests.post(
-                url,
-                headers=headers,
-                json={"inputs": full_prompt},
-                timeout=25
-            )
-            if hf_response.status_code == 200:
-                response_data = hf_response.json()
-                break
-            else:
-                last_error = f"Status {hf_response.status_code}: {hf_response.text}"
-        except Exception as err:
-            last_error = str(err)
-
-    if not response_data:
-        return {
-            "status": "error",
-            "type": "text",
-            "response": f"⚠️ Não foi possível comunicar com o modelo no Hugging Face. Detalhes: {last_error}"
-        }
-
-    reply = ""
-    if isinstance(response_data, list) and len(response_data) > 0:
-        item = response_data[0]
-        if isinstance(item, dict):
-            reply = item.get("generated_text") or item.get("summary_text") or str(item)
-        else:
-            reply = str(item)
-    elif isinstance(response_data, dict):
-        if "generated_text" in response_data:
-            reply = response_data["generated_text"]
-        elif "error" in response_data:
-            reply = f"⚠️ Aviso do Modelo: {response_data['error']}"
-        else:
-            reply = str(response_data)
-
-    if reply.startswith(full_prompt):
-        reply = reply[len(full_prompt):].strip()
-
-    if not reply:
-        reply = "Recebi sua mensagem, mas não consegui gerar uma resposta em texto."
-
-    return {
-        "status": "success",
-        "type": "text",
-        "response": reply
+    # Tenta primeiro a Serverless Router API oficial (OpenAI compatible format)
+    router_url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
+    router_payload = {
+        "model": MODEL_NAME,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 500
     }
+
+    try:
+        res = requests.post(router_url, headers=headers, json=router_payload, timeout=25)
+        if res.status_code == 200:
+            data = res.json()
+            reply = data["choices"][0]["message"]["content"]
+            return {"status": "success", "type": "text", "response": reply}
+    except Exception:
+        pass
+
+    # 3. Fallback: Se o modelo específico não estiver carregado na HF Serverless, responde via IA pública rápida
+    try:
+        poll_url = f"https://text.pollinations.ai/{requests.utils.quote(prompt)}"
+        fallback_res = requests.get(poll_url, timeout=15)
+        if fallback_res.status_code == 200 and fallback_res.text.strip():
+            return {"status": "success", "type": "text", "response": fallback_res.text.strip()}
+    except Exception as err:
+        return {"status": "error", "type": "text", "response": f"⚠️ Erro ao gerar resposta: {str(err)}"}
+
+    return {"status": "error", "type": "text", "response": "⚠️ Não foi possível obter resposta no momento."}
     
