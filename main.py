@@ -46,7 +46,7 @@ async def process_chat(payload: ChatPayload):
             "media_url": img_url
         }
 
-    # 2. Processamento Local / Motor Autónomo AVS (Sem dependência externa)
+    # 2. Processamento Local / Motor Autónomo AVS
     if AVS_URL:
         try:
             url = f"{AVS_URL.rstrip('/')}/v1/chat/completions"
@@ -63,10 +63,10 @@ async def process_chat(payload: ChatPayload):
         except Exception:
             pass
 
-    # Resposta padrão do motor se o AVS não devolver texto
+    # Resposta padrão limpa do motor Radamn
     return {
         "status": "success",
         "type": "text",
-        "response": f"Radamn Core: Recebido '{prompt}'. O motor autônomo está operacional e sem dependência do Hugging Face!"
+        "response": f"Radamn Core: Entendido! Processado: '{prompt}'"
     }
     
