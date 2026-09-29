@@ -1,8 +1,7 @@
-from fastapi import FastAPI, Header
+from fastapi import FastAPI, Header, Optional
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import urllib.parse
-import os
 
 app = FastAPI(title="Radamn Engine Core", version="2.0")
 
@@ -27,7 +26,7 @@ def status():
     }
 
 @app.post("/api/chat")
-async def process_chat(payload: ChatPayload):
+async def process_chat(payload: ChatPayload, authorization: Optional[str] = Header(None)):
     prompt = payload.message.strip()
 
     # 1. Geração de Imagens
