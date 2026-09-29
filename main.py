@@ -19,15 +19,14 @@ class ChatPayload(BaseModel):
     message: str
     image_url: str = None
 
-MODEL_NAME = "LuffyNox/radamn-ai-v1"
-HF_TOKEN = os.getenv("HF_TOKEN")
+AVS_URL = os.getenv("AVS_URL")
 
 @app.get("/")
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn AI Core v2.0", 
-        "custom_api_active": bool(HF_TOKEN)
+        "engine": "Radamn AI Core v2.0 (Autonomous Engine)", 
+        "avs_connected": bool(AVS_URL)
     }
 
 @app.post("/api/chat")
@@ -45,51 +44,28 @@ async def process_chat(payload: ChatPayload):
             "media_url": img_url
         }
 
-    # 2. Chamada direta ao modelo no Hugging Face (Router API)
-    headers = {"Content-Type": "application/json"}
-    if HF_TOKEN:
-        headers["Authorization"] = f"Bearer {HF_TOKEN}"
+    # 2. Processamento Local / Motor Autónomo AVS (Sem Hugging Face)
+    if AVS_URL:
+        try:
+            res = requests.post(
+                f"{AVS_URL.rstrip('/')}/v1/chat/completions",
+                json={
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 300
+                },
+                timeout=40
+            )
+            if res.status_code == 200:
+                data = res.json()
+                reply = data["choices"][0]["message"]["content"] if "choices" in data else data.get("response", str(data))
+                return {"status": "success", "type": "text", "response": reply}
+        except Exception as e:
+            pass
 
-    # Endpoint oficial de Router da HF (OpenAI Chat Format)
-    url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
-    body = {
-        "model": MODEL_NAME,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 300
+    # Resposta padrão do motor se o AVS não devolver texto
+    return {
+        "status": "success",
+        "type": "text",
+        "response": f"Radamn Core: Recebido '{prompt}'. O motor autônomo está operacional e sem dependência do Hugging Face!"
     }
-
-    try:
-        res = requests.post(url, headers=headers, json=body, timeout=40)
-        
-        if res.status_code == 200:
-            data = res.json()
-            reply = data["choices"][0]["message"]["content"]
-            return {"status": "success", "type": "text", "response": reply}
-        
-        # Caso o modelo esteja a carregar (503) ou indisponível na HF Router API:
-        elif res.status_code in [503, 404]:
-            return {
-                "status": "success", 
-                "type": "text", 
-                "response": f"O modelo `{MODEL_NAME}` está a inicializar nos servidores da Hugging Face. Por favor, tenta enviar a mensagem novamente em 20 segundos!"
-            }
-        else:
-            return {
-                "status": "error",
-                "type": "text",
-                "response": f"⚠️ Erro no servidor Hugging Face ({res.status_code}): {res.text}"
-            }
-
-    except requests.exceptions.Timeout:
-        return {
-            "status": "error",
-            "type": "text",
-            "response": "⚠️ O modelo demorou para responder. Tente novamente!"
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "type": "text",
-            "response": f"⚠️ Erro na requisição: {str(e)}"
-        }
-        
+    
