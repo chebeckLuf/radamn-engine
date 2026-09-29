@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import requests
+import urllib.request
+import urllib.parse
+import json
 import os
 
 app = FastAPI(title="Radamn Engine Core", version="2.0")
@@ -35,7 +37,7 @@ async def process_chat(payload: ChatPayload):
     
     # 1. Geração de Imagem HD (Flux)
     if prompt.lower().startswith("crie uma imagem") or prompt.lower().startswith("gerar imagem"):
-        prompt_encoded = requests.utils.quote(prompt)
+        prompt_encoded = urllib.parse.quote(prompt)
         img_url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&model=flux&nologo=true"
         return {
             "status": "success",
@@ -44,22 +46,21 @@ async def process_chat(payload: ChatPayload):
             "media_url": img_url
         }
 
-    # 2. Processamento Local / Motor Autónomo AVS (Sem Hugging Face)
+    # 2. Processamento Local / Motor Autónomo AVS (Sem dependência externa)
     if AVS_URL:
         try:
-            res = requests.post(
-                f"{AVS_URL.rstrip('/')}/v1/chat/completions",
-                json={
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 300
-                },
-                timeout=40
-            )
-            if res.status_code == 200:
-                data = res.json()
-                reply = data["choices"][0]["message"]["content"] if "choices" in data else data.get("response", str(data))
+            url = f"{AVS_URL.rstrip('/')}/v1/chat/completions"
+            data = json.dumps({
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 300
+            }).encode('utf-8')
+            
+            req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+            with urllib.request.urlopen(req, timeout=40) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                reply = res_data["choices"][0]["message"]["content"] if "choices" in res_data else res_data.get("response", str(res_data))
                 return {"status": "success", "type": "text", "response": reply}
-        except Exception as e:
+        except Exception:
             pass
 
     # Resposta padrão do motor se o AVS não devolver texto
