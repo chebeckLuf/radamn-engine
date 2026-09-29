@@ -19,8 +19,8 @@ class ChatPayload(BaseModel):
     message: str
     image_url: str = None
 
-# URL da tua AVS Própria hospedada no Render
-AVS_URL = os.getenv("AVS_URL", "https://radamanthys-core-vjap.onrender.com/predict")
+# URL da tua AVS Própria hospedada no Render (endpoint de chat atualizado)
+AVS_URL = os.getenv("AVS_URL", "https://radamanthys-core-vjap.onrender.com/v1/chat/completions")
 
 @app.get("/")
 def status():
@@ -45,17 +45,25 @@ async def process_chat(payload: ChatPayload):
             "media_url": img_url
         }
 
-    # 2. Chamada direta ao Motor AVS Próprio no Render
+    # 2. Chamada direta ao Motor AVS Próprio no Render (formato /v1/chat/completions)
     headers = {"Content-Type": "application/json"}
-    body = {"text": prompt}
+    body = {
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
 
     try:
         res = requests.post(AVS_URL, headers=headers, json=body, timeout=60)
         
         if res.status_code == 200:
             data = res.json()
-            # Pega o campo 'response' ou 'message' do retorno da AVS
-            reply = data.get("response") or data.get("message") or "Sem resposta do modelo."
+            # Extrai a resposta no formato OpenAI/ChatCompletions ou fallback
+            if "choices" in data and len(data["choices"]) > 0:
+                reply = data["choices"][0]["message"]["content"]
+            else:
+                reply = data.get("response") or data.get("message") or "Sem resposta do modelo."
+                
             return {"status": "success", "type": "text", "response": reply}
         
         elif res.status_code == 503:
