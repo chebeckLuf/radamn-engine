@@ -19,15 +19,15 @@ class ChatPayload(BaseModel):
     message: str
     image_url: str = None
 
-MODEL_NAME = "LuffyNox/radamn-ai-v1"
-HF_TOKEN = os.getenv("HF_TOKEN")
+# URL da tua AVS Própria hospedada no Render
+AVS_URL = os.getenv("AVS_URL", "https://radamanthys-core-vjap.onrender.com/predict")
 
 @app.get("/")
 def status():
     return {
         "status": "Online", 
         "engine": "Radamn AI Core v2.0", 
-        "custom_api_active": bool(HF_TOKEN)
+        "avs_endpoint": AVS_URL
     }
 
 @app.post("/api/chat")
@@ -45,51 +45,42 @@ async def process_chat(payload: ChatPayload):
             "media_url": img_url
         }
 
-    # 2. Chamada direta ao modelo no Hugging Face (Router API)
+    # 2. Chamada direta ao Motor AVS Próprio no Render
     headers = {"Content-Type": "application/json"}
-    if HF_TOKEN:
-        headers["Authorization"] = f"Bearer {HF_TOKEN}"
-
-    # Endpoint oficial de Router da HF (OpenAI Chat Format)
-    url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
-    body = {
-        "model": MODEL_NAME,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 300
-    }
+    body = {"text": prompt}
 
     try:
-        res = requests.post(url, headers=headers, json=body, timeout=40)
+        res = requests.post(AVS_URL, headers=headers, json=body, timeout=60)
         
         if res.status_code == 200:
             data = res.json()
-            reply = data["choices"][0]["message"]["content"]
+            # Pega o campo 'response' ou 'message' do retorno da AVS
+            reply = data.get("response") or data.get("message") or "Sem resposta do modelo."
             return {"status": "success", "type": "text", "response": reply}
         
-        # Caso o modelo esteja a carregar (503) ou indisponível na HF Router API:
-        elif res.status_code in [503, 404]:
+        elif res.status_code == 503:
             return {
                 "status": "success", 
                 "type": "text", 
-                "response": f"O modelo `{MODEL_NAME}` está a inicializar nos servidores da Hugging Face. Por favor, tenta enviar a mensagem novamente em 20 segundos!"
+                "response": "O motor AVS está a inicializar no Render. Por favor, tente novamente em alguns segundos!"
             }
         else:
             return {
                 "status": "error",
                 "type": "text",
-                "response": f"⚠️ Erro no servidor Hugging Face ({res.status_code}): {res.text}"
+                "response": f"⚠️ Erro no servidor AVS ({res.status_code}): {res.text}"
             }
 
     except requests.exceptions.Timeout:
         return {
             "status": "error",
             "type": "text",
-            "response": "⚠️ O modelo demorou para responder. Tente novamente!"
+            "response": "⚠️ O motor AVS demorou para responder (Timeout). Tente novamente!"
         }
     except Exception as e:
         return {
             "status": "error",
             "type": "text",
-            "response": f"⚠️ Erro na requisição: {str(e)}"
+            "response": f"⚠️ Erro na requisição interna: {str(e)}"
         }
         
