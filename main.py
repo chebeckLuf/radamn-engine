@@ -1,7 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import requests
+import urllib.request
+import urllib.parse
+import json
 import os
 
 app = FastAPI(title="Radamn Engine Core", version="2.0")
@@ -19,76 +21,42 @@ class ChatPayload(BaseModel):
     message: str
     image_url: str = None
 
-# URL da tua AVS Própria hospedada no Render (endpoint de chat atualizado)
-AVS_URL = os.getenv("AVS_URL", "https://radamanthys-core-vjap.onrender.com/v1/chat/completions")
+# A SUA CHAVE DA SUA API
+RADAMN_API_KEY = os.getenv("RADAMN_API_KEY")
 
 @app.get("/")
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn AI Core v2.0", 
-        "avs_endpoint": AVS_URL
+        "engine": "Radamn Engine Core v2.0",
+        "auth_enabled": bool(RADAMN_API_KEY)
     }
 
 @app.post("/api/chat")
-async def process_chat(payload: ChatPayload):
+async def process_chat(payload: ChatPayload, authorization: str = Header(None)):
+    # Validação da sua própria chave
+    if RADAMN_API_KEY:
+        expected_token = f"Bearer {RADAMN_API_KEY}"
+        if authorization != expected_token and authorization != RADAMN_API_KEY:
+            raise HTTPException(status_code=401, detail="Chave de API do Radamn inválida ou não fornecida.")
+
     prompt = payload.message.strip()
-    
-    # 1. Geração de Imagem HD (Flux)
+
+    # 1. Geração de Imagem HD (Flux Engine)
     if prompt.lower().startswith("crie uma imagem") or prompt.lower().startswith("gerar imagem"):
-        prompt_encoded = requests.utils.quote(prompt)
+        prompt_encoded = urllib.parse.quote(prompt)
         img_url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&model=flux&nologo=true"
         return {
             "status": "success",
             "type": "image",
-            "response": "Sua imagem HD foi gerada pelo motor Radamn!",
+            "response": "Sua imagem HD foi gerada pelo motor Radamn Engine!",
             "media_url": img_url
         }
 
-    # 2. Chamada direta ao Motor AVS Próprio no Render (formato /v1/chat/completions)
-    headers = {"Content-Type": "application/json"}
-    body = {
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
+    # 2. Resposta do Motor Radamn Engine
+    return {
+        "status": "success",
+        "type": "text",
+        "response": f"Radamn Engine: Processado com sucesso sob autorização da sua chave própria!"
     }
-
-    try:
-        res = requests.post(AVS_URL, headers=headers, json=body, timeout=60)
-        
-        if res.status_code == 200:
-            data = res.json()
-            # Extrai a resposta no formato OpenAI/ChatCompletions ou fallback
-            if "choices" in data and len(data["choices"]) > 0:
-                reply = data["choices"][0]["message"]["content"]
-            else:
-                reply = data.get("response") or data.get("message") or "Sem resposta do modelo."
-                
-            return {"status": "success", "type": "text", "response": reply}
-        
-        elif res.status_code == 503:
-            return {
-                "status": "success", 
-                "type": "text", 
-                "response": "O motor AVS está a inicializar no Render. Por favor, tente novamente em alguns segundos!"
-            }
-        else:
-            return {
-                "status": "error",
-                "type": "text",
-                "response": f"⚠️ Erro no servidor AVS ({res.status_code}): {res.text}"
-            }
-
-    except requests.exceptions.Timeout:
-        return {
-            "status": "error",
-            "type": "text",
-            "response": "⚠️ O motor AVS demorou para responder (Timeout). Tente novamente!"
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "type": "text",
-            "response": f"⚠️ Erro na requisição interna: {str(e)}"
-        }
-        
+    
