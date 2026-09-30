@@ -10,7 +10,7 @@ from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Radamn Engine Core", version="7.0")
+app = FastAPI(title="Radamn Engine Core", version="8.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 # =====================================================================
-# RADAMN ENGINE v7.0 - DIRECT KNOWLEDGE & FLEXIBLE SEARCH
+# RADAMN ENGINE v8.0 - INTEGRATED GEMINI IMAGE GENERATION & CORE LOGIC
 # =====================================================================
 
 class CognitiveMemory:
@@ -44,16 +44,12 @@ class RadamnConversationalEngine:
     def __init__(self):
         self.memory = CognitiveMemory()
         
-        # Base de Conhecimento Local (Respostas Diretas)
         self.knowledge_base = {
             "inteligencia artificial": "Inteligência Artificial (IA) é o campo da ciência da computação dedicado a criar sistemas capazes de realizar tarefas que normalmente exigem inteligência humana, como raciocínio, aprendizado, reconhecimento de padrões e tomada de decisão.",
-            "ia": "Inteligência Artificial é a capacidade de um sistema processar dados, aprender padrões e interagir com seres humanos de forma lógica.",
-            "python": "Python é uma linguagem de programação de alto nível, amplamente utilizada em desenvolvimento web, automação, análise de dados e Inteligência Artificial.",
-            "radamn": "Radamn AI é um ecossistema de inteligência artificial autônomo, desenvolvido com código próprio em Python sem dependência de APIs externas de LLM."
+            "python": "Python é uma linguagem de programação de alto nível, amplamente utilizada em desenvolvimento web, automação, análise de dados e Inteligência Artificial."
         }
 
     def _normalize_text(self, text: str) -> str:
-        # Remove acentos e converte para minúsculas
         text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8').lower()
         text = re.sub(r'[^\w\s\+\-\*\/\=]', '', text)
         return text.strip()
@@ -70,7 +66,6 @@ class RadamnConversationalEngine:
         return None
 
     def search_web(self, query: str) -> str:
-        """Busca resiliente na Wikipedia API."""
         try:
             encoded_query = urllib.parse.quote(query)
             wiki_url = f"https://pt.wikipedia.org/api/rest_v1/page/summary/{encoded_query}"
@@ -103,14 +98,32 @@ class RadamnConversationalEngine:
             self.memory.add_interaction("assistant", math_response)
             return {"type": "text", "response": math_response}
 
-        # 2. BASE DE CONHECIMENTO LOCAL (Resposta Imediata)
+        # 2. RECONHECIMENTO DO CRIADOR (Prioridade)
+        if any(w in clean_input for w in ["radamn humano", "meu criador", "sou seu criador"]):
+            response = "Fala, Radamn! Salve pro meu criador. O sistema tá rodando 100% sob o teu comando!"
+            self.memory.add_interaction("user", user_input)
+            self.memory.add_interaction("assistant", response)
+            return {"type": "text", "response": response}
+
+        # 3. MEMÓRIA DE CONTEXTO E CONTINUAÇÃO
+        if any(w in clean_input for w in ["entendeu o que eu disse", "disse antes", "falei antes", "entendeu que eu disse"]):
+            last_msg = self.memory.get_last_user_message()
+            if last_msg:
+                response = f"Entendi sim! Você tinha dito: '{last_msg}'. O sistema registrou e guardou esse contexto."
+            else:
+                response = "Entendi o recado sim, tô acompanhando cada mensagem."
+            self.memory.add_interaction("user", user_input)
+            self.memory.add_interaction("assistant", response)
+            return {"type": "text", "response": response}
+
+        # 4. BASE DE CONHECIMENTO LOCAL
         for key, info in self.knowledge_base.items():
             if key in clean_input:
                 self.memory.add_interaction("user", user_input)
                 self.memory.add_interaction("assistant", info)
                 return {"type": "text", "response": info}
 
-        # 3. PEDIDO DE CONTINUAÇÃO / SEQUÊNCIA
+        # 5. PEDIDO DE CONTINUAÇÃO / SEQUÊNCIA DE TÓPICO
         if any(w in clean_input for w in ["da a sequencia", "me fala", "continue", "fala mais", "explique"]):
             last_msg = self.memory.get_last_user_message()
             if last_msg:
@@ -124,7 +137,7 @@ class RadamnConversationalEngine:
                     "response": search_result
                 }
 
-        # 4. INTENÇÃO DE BUSCA NA WEB
+        # 6. INTENÇÃO DE BUSCA NA WEB
         search_triggers = ["pesquise sobre", "pesquisa sobre", "procure sobre", "o que e", "quem e", "busca"]
         is_search = any(clean_input.startswith(trigger) for trigger in search_triggers)
 
@@ -142,21 +155,14 @@ class RadamnConversationalEngine:
                 "response": search_result
             }
 
-        # 5. EMPATIA E SUPORTE EMOCIONAL
+        # 7. EMPATIA E SUPORTE EMOCIONAL
         if any(w in clean_input for w in ["estressado", "cansado", "exausto", "dia dificil"]):
             response = "Sei como é... Dias assim pesam mesmo. Tenta dar uma respirada, mano. Quer trocar uma ideia pra desanuviar ou precisa de ajuda com algo?"
             self.memory.add_interaction("user", user_input)
             self.memory.add_interaction("assistant", response)
             return {"type": "text", "response": response}
 
-        # 6. RECONHECIMENTO DO CRIADOR
-        if any(w in clean_input for w in ["criador", "meu criador", "sou seu criador", "radamn humano"]):
-            response = "Fala, Radamn! Salve pro meu criador. O sistema tá rodando 100% sob o teu comando!"
-            self.memory.add_interaction("user", user_input)
-            self.memory.add_interaction("assistant", response)
-            return {"type": "text", "response": response}
-
-        # 7. RESPOSTAS CONVERSACIONAIS GENÉRICAS
+        # 8. RESPOSTA PADRÃO VARIADA
         self.memory.add_interaction("user", user_input)
         responses = [
             f"Entendi o seu ponto. Me fala mais sobre o que você precisa em relação a isso.",
@@ -183,20 +189,25 @@ class ChatPayload(BaseModel):
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn Engine Core v7.0 (Direct Knowledge & Flexible Search)"
+        "engine": "Radamn Engine Core v8.0 (Integrated Gemini Native Generation)"
     }
 
 @app.post("/api/chat")
 async def process_chat(payload: ChatPayload, authorization: Optional[str] = Header(None)):
     prompt = payload.message.strip()
 
+    # DETECÇÃO E GERAÇÃO DE IMAGEM NO ESTILO NATIVO DO GEMINI
     if prompt.lower().startswith("crie uma imagem") or prompt.lower().startswith("gerar imagem"):
-        prompt_encoded = urllib.parse.quote(prompt)
+        clean_prompt = re.sub(r'^(crie uma imagem|gerar imagem)\s*(de|da|do|sobre)?\s*', '', prompt, flags=re.IGNORECASE).strip()
+        
+        # Gera o prompt otimizado no formato renderizável
+        prompt_encoded = urllib.parse.quote(clean_prompt)
         img_url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&model=flux&nologo=true"
+        
         return {
             "status": "success",
             "type": "image",
-            "response": "Imagem gerada com sucesso pelo motor Radamn!",
+            "response": f"Aqui está a imagem gerada para: **{clean_prompt}**",
             "media_url": img_url
         }
 
@@ -207,5 +218,5 @@ async def process_chat(payload: ChatPayload, authorization: Optional[str] = Head
         "type": resultado.get("type", "text"),
         "status_steps": resultado.get("status_steps", []),
         "response": resultado["response"]
-        }
+    }
     
