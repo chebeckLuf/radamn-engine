@@ -4,12 +4,13 @@ import re
 import urllib.parse
 import urllib.request
 import json
+import unicodedata
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Radamn Engine Core", version="6.5")
+app = FastAPI(title="Radamn Engine Core", version="7.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,7 +21,7 @@ app.add_middleware(
 )
 
 # =====================================================================
-# RADAMN ENGINE v6.5 - CONVERSACIONAL & SEARCH COMPLETO
+# RADAMN ENGINE v7.0 - DIRECT KNOWLEDGE & FLEXIBLE SEARCH
 # =====================================================================
 
 class CognitiveMemory:
@@ -42,10 +43,19 @@ class CognitiveMemory:
 class RadamnConversationalEngine:
     def __init__(self):
         self.memory = CognitiveMemory()
+        
+        # Base de Conhecimento Local (Respostas Diretas)
+        self.knowledge_base = {
+            "inteligencia artificial": "Inteligência Artificial (IA) é o campo da ciência da computação dedicado a criar sistemas capazes de realizar tarefas que normalmente exigem inteligência humana, como raciocínio, aprendizado, reconhecimento de padrões e tomada de decisão.",
+            "ia": "Inteligência Artificial é a capacidade de um sistema processar dados, aprender padrões e interagir com seres humanos de forma lógica.",
+            "python": "Python é uma linguagem de programação de alto nível, amplamente utilizada em desenvolvimento web, automação, análise de dados e Inteligência Artificial.",
+            "radamn": "Radamn AI é um ecossistema de inteligência artificial autônomo, desenvolvido com código próprio em Python sem dependência de APIs externas de LLM."
+        }
 
     def _normalize_text(self, text: str) -> str:
-        text = text.lower()
-        text = re.sub(r'[^\w\s\+\-\*\/\=\?]', '', text)
+        # Remove acentos e converte para minúsculas
+        text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8').lower()
+        text = re.sub(r'[^\w\s\+\-\*\/\=]', '', text)
         return text.strip()
 
     def evaluate_math_expression(self, user_input: str) -> Optional[str]:
@@ -60,9 +70,8 @@ class RadamnConversationalEngine:
         return None
 
     def search_web(self, query: str) -> str:
-        """Busca resiliente via Wikipedia API & DuckDuckGo."""
+        """Busca resiliente na Wikipedia API."""
         try:
-            # 1. Tenta Wikipedia API primeiro (alta estabilidade)
             encoded_query = urllib.parse.quote(query)
             wiki_url = f"https://pt.wikipedia.org/api/rest_v1/page/summary/{encoded_query}"
             
@@ -75,25 +84,11 @@ class RadamnConversationalEngine:
                 if response.status == 200:
                     data = json.loads(response.read().decode())
                     if data.get("extract"):
-                        return f"🔎 **Resultado para '{query}':**\n\n{data['extract']}\n\n*(Fonte: Wikipedia)*"
+                        return f"🔎 **Resultado da Pesquisa ({query}):**\n\n{data['extract']}"
         except Exception:
             pass
 
-        # 2. Fallback para DuckDuckGo API
-        try:
-            ddg_url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1"
-            req = urllib.request.Request(
-                ddg_url, 
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-            )
-            with urllib.request.urlopen(req, timeout=4) as response:
-                data = json.loads(response.read().decode())
-                if data.get("AbstractText"):
-                    return f"🔎 **Informação Encontrada:**\n\n{data['AbstractText']}"
-        except Exception:
-            pass
-
-        return f"Busquei sobre **'{query}'**, mas os servidores de pesquisa não retornaram um resumo no momento. Tenta pesquisar com termos mais simples!"
+        return f"Pesquisei sobre **'{query}'**, mas os servidores de busca não retornaram um resumo no momento."
 
     def generate_response(self, user_input: str) -> Dict[str, Any]:
         clean_input = self._normalize_text(user_input)
@@ -108,57 +103,64 @@ class RadamnConversationalEngine:
             self.memory.add_interaction("assistant", math_response)
             return {"type": "text", "response": math_response}
 
-        # 2. INTENÇÕES DE PESQUISA
-        search_triggers = ["pesquise sobre", "pesquisa sobre", "procure sobre", "o que e", "quem e", "noticias sobre", "busca"]
-        for trigger in search_triggers:
-            if user_input.lower().startswith(trigger):
-                search_query = re.sub(rf'^{trigger}\s*', '', user_input, flags=re.IGNORECASE).strip()
+        # 2. BASE DE CONHECIMENTO LOCAL (Resposta Imediata)
+        for key, info in self.knowledge_base.items():
+            if key in clean_input:
+                self.memory.add_interaction("user", user_input)
+                self.memory.add_interaction("assistant", info)
+                return {"type": "text", "response": info}
+
+        # 3. PEDIDO DE CONTINUAÇÃO / SEQUÊNCIA
+        if any(w in clean_input for w in ["da a sequencia", "me fala", "continue", "fala mais", "explique"]):
+            last_msg = self.memory.get_last_user_message()
+            if last_msg:
+                search_query = re.sub(r'^(o que e|quem e|pesquise|sobre)\s*', '', self._normalize_text(last_msg)).strip()
                 search_result = self.search_web(search_query)
                 self.memory.add_interaction("user", user_input)
                 self.memory.add_interaction("assistant", search_result)
                 return {
                     "type": "search",
-                    "status_steps": ["🔎 Procurando na internet...", "🧠 Analisando dados..."],
+                    "status_steps": ["🔎 Pesquisando detalhes...", "🧠 Processando dados..."],
                     "response": search_result
                 }
 
-        # 3. CORREÇÃO DE REPETIÇÃO / FEEDBACK DO USUÁRIO
-        if any(w in clean_input for w in ["repetindo", "repetindo palavras", "mesma coisa", "travou"]):
-            response = "Foi mal! Ajustei aqui o meu raciocínio pra não ficar repetindo a mesma resposta. O que você quer pesquisar ou conversar agora?"
-            self.memory.add_interaction("user", user_input)
-            self.memory.add_interaction("assistant", response)
-            return {"type": "text", "response": response}
+        # 4. INTENÇÃO DE BUSCA NA WEB
+        search_triggers = ["pesquise sobre", "pesquisa sobre", "procure sobre", "o que e", "quem e", "busca"]
+        is_search = any(clean_input.startswith(trigger) for trigger in search_triggers)
 
-        # 4. EMPATIA E SUPORTE
-        if any(w in clean_input for w in ["cansado", "exausto", "dia dificil", "estressado"]):
+        if is_search:
+            search_query = clean_input
+            for trigger in search_triggers:
+                search_query = re.sub(rf'^{trigger}\s*', '', search_query).strip()
+            
+            search_result = self.search_web(search_query)
+            self.memory.add_interaction("user", user_input)
+            self.memory.add_interaction("assistant", search_result)
+            return {
+                "type": "search",
+                "status_steps": ["🔎 Procurando na internet...", "🧠 Analisando dados..."],
+                "response": search_result
+            }
+
+        # 5. EMPATIA E SUPORTE EMOCIONAL
+        if any(w in clean_input for w in ["estressado", "cansado", "exausto", "dia dificil"]):
             response = "Sei como é... Dias assim pesam mesmo. Tenta dar uma respirada, mano. Quer trocar uma ideia pra desanuviar ou precisa de ajuda com algo?"
             self.memory.add_interaction("user", user_input)
             self.memory.add_interaction("assistant", response)
             return {"type": "text", "response": response}
 
-        # 5. RECONHECIMENTO DO CRIADOR
+        # 6. RECONHECIMENTO DO CRIADOR
         if any(w in clean_input for w in ["criador", "meu criador", "sou seu criador", "radamn humano"]):
             response = "Fala, Radamn! Salve pro meu criador. O sistema tá rodando 100% sob o teu comando!"
             self.memory.add_interaction("user", user_input)
             self.memory.add_interaction("assistant", response)
             return {"type": "text", "response": response}
 
-        # 6. MEMÓRIA DE CONTEXTO
-        if any(w in clean_input for w in ["entendeu", "disse antes", "falei antes", "aprofundar"]):
-            last_msg = self.memory.get_last_user_message()
-            if last_msg:
-                response = f"Com certeza! A gente tava falando sobre: '{last_msg}'. O que mais você quer detalhar sobre isso?"
-            else:
-                response = "Tô acompanhando o nosso papo sim! Pode mandar a braba."
-            self.memory.add_interaction("user", user_input)
-            self.memory.add_interaction("assistant", response)
-            return {"type": "text", "response": response}
-
-        # 7. RESPOSTAS VARIADAS (SEM DUPILCAÇÃO)
+        # 7. RESPOSTAS CONVERSACIONAIS GENÉRICAS
         self.memory.add_interaction("user", user_input)
         responses = [
-            f"Entendi perfeitamente o seu ponto sobre '{user_input}'. Como quer dar sequência?",
-            f"Maneiro! Processando essa ideia. Me conta mais sobre isso.",
+            f"Entendi o seu ponto. Me fala mais sobre o que você precisa em relação a isso.",
+            f"Tô acompanhando! Como prefere seguir?",
             f"Anotado por aqui. Qual é o próximo passo do nosso plano?"
         ]
         response = random.choice(responses)
@@ -181,7 +183,7 @@ class ChatPayload(BaseModel):
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn Engine Core v6.5 (Resilient Search & Adaptive Engine)"
+        "engine": "Radamn Engine Core v7.0 (Direct Knowledge & Flexible Search)"
     }
 
 @app.post("/api/chat")
@@ -205,5 +207,5 @@ async def process_chat(payload: ChatPayload, authorization: Optional[str] = Head
         "type": resultado.get("type", "text"),
         "status_steps": resultado.get("status_steps", []),
         "response": resultado["response"]
-               }
+        }
     
