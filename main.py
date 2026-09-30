@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Radamn Engine Core", version="6.0")
+app = FastAPI(title="Radamn Engine Core", version="6.5")
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,7 +20,7 @@ app.add_middleware(
 )
 
 # =====================================================================
-# RADAMN ADVANCED BEHAVIORAL & REASONING ENGINE v6.0
+# RADAMN ENGINE v6.5 - CONVERSACIONAL & SEARCH COMPLETO
 # =====================================================================
 
 class CognitiveMemory:
@@ -49,41 +49,51 @@ class RadamnConversationalEngine:
         return text.strip()
 
     def evaluate_math_expression(self, user_input: str) -> Optional[str]:
-        """Comportamento 1: Validação Independente de Matemática/Cálculos."""
-        # Extrai expressões matemáticas simples (ex: "quanto e 2 + 2", "5 * 10 e quanto?")
         match = re.search(r'(\d+[\s\+\-\*\/\%]+\d+)', user_input)
         if match:
             expr = match.group(1).replace(" ", "")
             try:
-                result = eval(expr) # Avaliação matemática segura
+                result = eval(expr)
                 return f"Calculando passo a passo: {expr} = **{result}**."
             except Exception:
                 return None
         return None
 
     def search_web(self, query: str) -> str:
-        """Busca em tempo real na Web."""
+        """Busca resiliente via Wikipedia API & DuckDuckGo."""
         try:
+            # 1. Tenta Wikipedia API primeiro (alta estabilidade)
             encoded_query = urllib.parse.quote(query)
-            url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
+            wiki_url = f"https://pt.wikipedia.org/api/rest_v1/page/summary/{encoded_query}"
             
             req = urllib.request.Request(
-                url, 
-                headers={'User-Agent': 'Mozilla/5.0'}
+                wiki_url, 
+                headers={'User-Agent': 'RadamnBot/1.0 (https://radamn.vercel.app)'}
             )
             
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=4) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode())
+                    if data.get("extract"):
+                        return f"🔎 **Resultado para '{query}':**\n\n{data['extract']}\n\n*(Fonte: Wikipedia)*"
+        except Exception:
+            pass
+
+        # 2. Fallback para DuckDuckGo API
+        try:
+            ddg_url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1"
+            req = urllib.request.Request(
+                ddg_url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            )
+            with urllib.request.urlopen(req, timeout=4) as response:
                 data = json.loads(response.read().decode())
                 if data.get("AbstractText"):
-                    return f"🔎 **Resultado da Pesquisa:**\n\n{data['AbstractText']}\n\n*(Fonte: {data.get('AbstractSource', 'Web')})*"
-                
-                related = data.get("RelatedTopics", [])
-                if related and "Text" in related[0]:
-                    return f"🔎 **Informação Encontrada:**\n\n{related[0]['Text']}"
-                
-                return f"Pesquisei sobre **'{query}'**, mas não encontrei um resumo direto na web."
+                    return f"🔎 **Informação Encontrada:**\n\n{data['AbstractText']}"
         except Exception:
-            return f"Não foi possível completar a pesquisa de '{query}' no momento por instabilidade na rede."
+            pass
+
+        return f"Busquei sobre **'{query}'**, mas os servidores de pesquisa não retornaram um resumo no momento. Tenta pesquisar com termos mais simples!"
 
     def generate_response(self, user_input: str) -> Dict[str, Any]:
         clean_input = self._normalize_text(user_input)
@@ -91,75 +101,65 @@ class RadamnConversationalEngine:
         if not clean_input:
             return {"type": "text", "response": "Tô por aqui! Pode mandar a sua mensagem."}
 
-        # COMPORTAMENTO 1: Validação de Matemática Independente
+        # 1. VALIDAÇÃO MATEMÁTICA
         math_response = self.evaluate_math_expression(user_input)
         if math_response:
             self.memory.add_interaction("user", user_input)
             self.memory.add_interaction("assistant", math_response)
             return {"type": "text", "response": math_response}
 
-        # DETEÇÃO DE BUSCA NA WEB
-        search_triggers = ["pesquise sobre", "procure sobre", "quem e", "o que e", "noticias sobre", "busca", "pesquisar"]
-        is_search = any(user_input.lower().startswith(trigger) for trigger in search_triggers)
+        # 2. INTENÇÕES DE PESQUISA
+        search_triggers = ["pesquise sobre", "pesquisa sobre", "procure sobre", "o que e", "quem e", "noticias sobre", "busca"]
+        for trigger in search_triggers:
+            if user_input.lower().startswith(trigger):
+                search_query = re.sub(rf'^{trigger}\s*', '', user_input, flags=re.IGNORECASE).strip()
+                search_result = self.search_web(search_query)
+                self.memory.add_interaction("user", user_input)
+                self.memory.add_interaction("assistant", search_result)
+                return {
+                    "type": "search",
+                    "status_steps": ["🔎 Procurando na internet...", "🧠 Analisando dados..."],
+                    "response": search_result
+                }
 
-        if is_search:
-            search_query = user_input
-            for trigger in search_triggers:
-                search_query = re.sub(rf'^{trigger}\s*', '', search_query, flags=re.IGNORECASE)
-            
-            search_result = self.search_web(search_query.strip())
-            self.memory.add_interaction("user", user_input)
-            self.memory.add_interaction("assistant", search_result)
-            return {
-                "type": "search",
-                "status_steps": ["🔎 Procurando na internet...", "🧠 Analisando dados..."],
-                "response": search_result
-            }
-
-        # COMPORTAMENTO 2: Empatia & Validação Emocional
-        if any(w in clean_input for w in ["cansado", "exausto", "dia dificil", "estressado", "corrida"]):
-            response = "Sei como é... Dias assim pesam mesmo. Tenta dar uma respirada, mano. Quer trocar uma ideia pra desparecer ou precisa de ajuda com algo?"
+        # 3. CORREÇÃO DE REPETIÇÃO / FEEDBACK DO USUÁRIO
+        if any(w in clean_input for w in ["repetindo", "repetindo palavras", "mesma coisa", "travou"]):
+            response = "Foi mal! Ajustei aqui o meu raciocínio pra não ficar repetindo a mesma resposta. O que você quer pesquisar ou conversar agora?"
             self.memory.add_interaction("user", user_input)
             self.memory.add_interaction("assistant", response)
             return {"type": "text", "response": response}
 
-        if any(w in clean_input for w in ["feliz", "consegui", "deu certo", "vitoria", "top"]):
-            response = "Boa! Notícia excelente! Tamo junto nessa conquista. O que vem a seguir no plano?"
+        # 4. EMPATIA E SUPORTE
+        if any(w in clean_input for w in ["cansado", "exausto", "dia dificil", "estressado"]):
+            response = "Sei como é... Dias assim pesam mesmo. Tenta dar uma respirada, mano. Quer trocar uma ideia pra desanuviar ou precisa de ajuda com algo?"
             self.memory.add_interaction("user", user_input)
             self.memory.add_interaction("assistant", response)
             return {"type": "text", "response": response}
 
-        # Reconhecimento do Criador
+        # 5. RECONHECIMENTO DO CRIADOR
         if any(w in clean_input for w in ["criador", "meu criador", "sou seu criador", "radamn humano"]):
             response = "Fala, Radamn! Salve pro meu criador. O sistema tá rodando 100% sob o teu comando!"
             self.memory.add_interaction("user", user_input)
             self.memory.add_interaction("assistant", response)
             return {"type": "text", "response": response}
 
-        # Contexto/Memória
-        if any(w in clean_input for w in ["entendeu", "entendeu o que", "disse antes", "falei antes"]):
+        # 6. MEMÓRIA DE CONTEXTO
+        if any(w in clean_input for w in ["entendeu", "disse antes", "falei antes", "aprofundar"]):
             last_msg = self.memory.get_last_user_message()
             if last_msg:
-                response = f"Entendi sim! Você tinha falado: '{last_msg}'. Tô acompanhando tudo certinho."
+                response = f"Com certeza! A gente tava falando sobre: '{last_msg}'. O que mais você quer detalhar sobre isso?"
             else:
                 response = "Tô acompanhando o nosso papo sim! Pode mandar a braba."
             self.memory.add_interaction("user", user_input)
             self.memory.add_interaction("assistant", response)
             return {"type": "text", "response": response}
 
-        # COMPORTAMENTO 3: Respostas Diretas e Sem Fluff
-        if any(w in clean_input for w in ["ola", "oi", "fala", "eai", "salve", "boa noite", "bom dia"]):
-            responses = ["Fala! Em que posso somar hoje?", "Salve! Tudo certo por aí? O que manda?"]
-            response = random.choice(responses)
-            self.memory.add_interaction("user", user_input)
-            self.memory.add_interaction("assistant", response)
-            return {"type": "text", "response": response}
-
-        # Resposta Genérica
+        # 7. RESPOSTAS VARIADAS (SEM DUPILCAÇÃO)
         self.memory.add_interaction("user", user_input)
         responses = [
-            "Entendi a ideia. Quer aprofundar nisso ou puxar outro assunto?",
-            "Visão! Tô acompanhando o raciocínio, manda a boa."
+            f"Entendi perfeitamente o seu ponto sobre '{user_input}'. Como quer dar sequência?",
+            f"Maneiro! Processando essa ideia. Me conta mais sobre isso.",
+            f"Anotado por aqui. Qual é o próximo passo do nosso plano?"
         ]
         response = random.choice(responses)
         self.memory.add_interaction("assistant", response)
@@ -181,7 +181,7 @@ class ChatPayload(BaseModel):
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn Engine Core v6.0 (Behavioral Engine)"
+        "engine": "Radamn Engine Core v6.5 (Resilient Search & Adaptive Engine)"
     }
 
 @app.post("/api/chat")
@@ -205,5 +205,5 @@ async def process_chat(payload: ChatPayload, authorization: Optional[str] = Head
         "type": resultado.get("type", "text"),
         "status_steps": resultado.get("status_steps", []),
         "response": resultado["response"]
-                                          }
+               }
     
