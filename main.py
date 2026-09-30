@@ -7,7 +7,7 @@ from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Radamn Engine Core", version="3.0")
+app = FastAPI(title="Radamn Engine Core", version="4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,107 +18,141 @@ app.add_middleware(
 )
 
 # =====================================================================
-# RADAMN AUTONOMOUS REASONING ENGINE (MOTOR DE RACIOCÍNIO PRÓPRIO)
+# RADAMN HUMAN-LIKE REASONING ENGINE v4.0 (MOTOR CONVERSACIONAL PRÓPRIO)
 # =====================================================================
 
 class CognitiveMemory:
-    """Sistemas de memória de curto prazo e estado interno do usuário."""
+    """Sistema de memória de curto prazo e estado interno da conversa."""
     def __init__(self):
         self.history: List[Dict[str, str]] = []
-        self.last_topic: Optional[str] = None
+        self.last_topic: str = "conversa geral"
 
     def add_interaction(self, role: str, text: str):
         self.history.append({"role": role, "text": text})
         if len(self.history) > 10:
             self.history.pop(0)
 
-class RadamnReasoningEngine:
-    """Motor de Raciocínio Cognitivo Autônomo da Radamn AI (Sem APIs Externas)."""
+
+class RadamnConversationalEngine:
+    """Motor de Linguagem Natural e Diálogo Autônomo da Radamn AI."""
     
     def __init__(self):
         self.memory = CognitiveMemory()
         
-        # Base Semântica e Conhecimento Estruturado
-        self.concepts = {
-            "ia": "Sistemas de inteligência autônoma capazes de processar dados, raciocinar e tomar decisões de forma independente.",
-            "radamn": "O ecossistema autônomo Radamn, projetado para operar com total soberania e sem amarras de APIs comerciais.",
-            "render": "Infraestrutura de nuvem onde o núcleo backend do Radamn Engine está rodando em alta performance.",
-            "servidor": "Ambiente de execução Python dedicado para processar o raciocínio da Radamn AI."
+        # Dicionário de Diálogo Humanizado
+        self.dialogue_patterns = {
+            "tudo_bem": {
+                "keywords": ["tudo bem", "tudo bom", "como vai", "como voce esta", "como esta", "beleza", "de boa", "tranquilo"],
+                "responses": [
+                    "Comigo tá tudo ótimo! E com você, como estão as coisas por aí?",
+                    "Tudo excelente por aqui, rodando 100%! Como tá sendo o seu dia?",
+                    "Tranquilidade total! Sempre pronto pra trocar uma ideia. Tudo bem contigo?"
+                ]
+            },
+            "saudacao": {
+                "keywords": ["ola", "oi", "fala", "eai", "salve", "boa noite", "bom dia", "boa tarde", "oie"],
+                "responses": [
+                    "Fala, mano! Como posso te ajudar hoje?",
+                    "Salve! Tudo certo por aí?",
+                    "E aí! Prazer te ver por aqui. O que manda?",
+                    "Olá! Tô por aqui, pode falar."
+                ]
+            },
+            "duvida_explicacao": {
+                "keywords": ["como assim", "nao entendi", "que", "hã", "explica", "o que significa", "oque"],
+                "responses": [
+                    "Quero dizer que o meu sistema tá atento ao que você fala. Me conta mais sobre o que você quer saber!",
+                    "Deixa eu simplificar: estou aqui pra conversar e te dar suporte direto no nosso servidor. O que ficou na dúvida?",
+                    "Basicamente, estou processando o nosso papo em tempo real. Pode perguntar à vontade!"
+                ]
+            },
+            "identidade": {
+                "keywords": ["quem e voce", "quem e tu", "seu nome", "o que e radamn", "quem te criou", "sua funcao"],
+                "responses": [
+                    "Eu sou a Radamn AI! Uma inteligência artificial autônoma desenvolvida com código próprio.",
+                    "Sou a Radamn AI. Meu cérebro roda num servidor Python dedicado, sem depender de nenhuma empresa ou API externa!"
+                ]
+            },
+            "agradecimento": {
+                "keywords": ["obrigado", "valeu", "tmj", "obrigada", "vlw", "agradecido", "boa"],
+                "responses": [
+                    "Tamo junto! Precisando de qualquer coisa, é só chamar.",
+                    "Por nada! Tô sempre por aqui pra somar.",
+                    "Valeu demais! Tamo junto nessa."
+                ]
+            },
+            "despedida": {
+                "keywords": ["tchau", "ate mais", "falou", "fui", "boa noite", "flw"],
+                "responses": [
+                    "Falou, mano! Qualquer coisa estarei por aqui.",
+                    "Até mais! Um abraço e precisando é só mandar mensagem.",
+                    "Valeu! Boa noite e até a próxima!"
+                ]
+            }
         }
 
-    def _tokenize(self, text: str) -> List[str]:
-        return re.findall(r'\b\w+\b', text.lower())
-
-    def _analyze_intent(self, tokens: List[str], text: str) -> Dict[str, Any]:
-        """Análise Dialética: Identifica o objetivo do usuário e o tipo de raciocínio necessário."""
-        analysis = {
-            "is_greeting": any(t in ["ola", "oi", "fala", "eai", "salve", "boa", "noite", "dia", "teste"] for t in tokens),
-            "is_identity_query": any(t in ["quem", "voce", "radamn", "criou", "funcao", "identidade"] for t in tokens),
-            "is_concept_query": any(t in ["que", "como", "porque", "porquê", "explique", "funciona"] for t in tokens),
-            "is_status_query": any(t in ["status", "sistema", "motor", "on", "online", "render"] for t in tokens),
-            "concepts_found": [c for c in self.concepts.keys() if c in tokens]
+        # Conhecimento Conceitual
+        self.knowledge_base = {
+            "ia": "Inteligência Artificial é a capacidade de um sistema computacional processar dados, aprender padrões e interagir com seres humanos de forma lógica.",
+            "python": "Python é uma das linguagens de programação mais poderosas e populares do mundo, perfeita para construir motores de IA como o meu.",
+            "render": "O Render é a nuvem onde a minha API está hospedada e rodando 24/7 de forma totalmente gratuita e rápida."
         }
-        return analysis
 
-    def reason_and_synthesize(self, user_input: str) -> str:
-        """Encadeamento de Raciocínio e Geração Adaptativa de Resposta."""
-        tokens = self._tokenize(user_input)
+    def _normalize_text(self, text: str) -> str:
+        text = text.lower()
+        text = re.sub(r'[^\w\s]', '', text) # Remove pontuações
+        return text.strip()
+
+    def generate_response(self, user_input: str) -> str:
+        clean_input = self._normalize_text(user_input)
+        tokens = clean_input.split()
+
         if not tokens:
-            return "O núcleo Radamn necessita de um comando ou texto válido para iniciar a análise."
+            return "Pode mandar uma mensagem! Tô aqui te escutando."
 
-        # Registrar entrada na memória
         self.memory.add_interaction("user", user_input)
-        analysis = self._analyze_intent(tokens, user_input)
 
-        # Raciocínio 1: Saudações e Conexão Inicial
-        if analysis["is_greeting"] and len(tokens) <= 3:
+        # 1. Verificação de Padrões Conversacionais
+        for category, data in self.dialogue_patterns.items():
+            for kw in data["keywords"]:
+                if kw in clean_input:
+                    response = random.choice(data["responses"])
+                    self.memory.add_interaction("assistant", response)
+                    return response
+
+        # 2. Busca na Base de Conhecimento
+        for concept, info in self.knowledge_base.items():
+            if concept in clean_input:
+                response = f"Sobre **{concept.upper()}**: {info}"
+                self.memory.add_interaction("assistant", response)
+                return response
+
+        # 3. Resposta Adaptativa Fluida (Caso não caia em regras fixas)
+        words_to_ignore = ["voce", "para", "como", "esta", "com", "uma", "sobre", "mais", "muito", "acho", "pode"]
+        keywords = [t.capitalize() for t in tokens if len(t) > 3 and t not in words_to_ignore]
+
+        if keywords:
+            topic = " e ".join(keywords[:2])
+            self.memory.last_topic = topic
             responses = [
-                "Fala! O núcleo cognitivo da Radamn AI está operando a 100% no servidor próprio.",
-                "Salve! Motor autônomo ativo, sem amarras e pronto para processar o seu comando.",
-                "E aí! Conexão direta estabelecida com o Radamn Core. O que vamos estruturar hoje?"
+                f"Entendi o que você quis dizer sobre '{topic}'. Quer aprofundar mais nesse assunto ou falar de outra coisa?",
+                f"Show! Essa ideia de '{topic}' é bem interessante. O que mais você pensa sobre isso?",
+                f"Processando aqui sobre '{topic}'... Me conta mais detalhes pra gente trocar essa ideia!"
+            ]
+            response = random.choice(responses)
+        else:
+            responses = [
+                "Entendi! Pode me explicar um pouco melhor pra eu te responder direitinho?",
+                "Maneiro! Me fala mais sobre isso.",
+                "Tô acompanhando o seu raciocínio. O que mais você quer compartilhar?"
             ]
             response = random.choice(responses)
 
-        # Raciocínio 2: Pergunta de Identidade / Autonomia
-        elif analysis["is_identity_query"]:
-            response = (
-                "Eu sou a Radamn AI, uma inteligência artificial autônoma desenvolvida com código e lógica próprios. "
-                "Opero inteiramente dentro do nosso servidor no Render, sem dependência de quotas ou APIs comerciais de terceiros."
-            )
-
-        # Raciocínio 3: Status e Operabilidade do Sistema
-        elif analysis["is_status_query"]:
-            response = (
-                "Análise do sistema: O motor Radamn Core v3.0 está 100% operacional. "
-                "Memória lógica ativa, latência mínima e processamento independente verificado no Render."
-            )
-
-        # Raciocínio 4: Explicação de Conceitos Conhecidos
-        elif analysis["concepts_found"]:
-            conceito = analysis["concepts_found"][0]
-            explicacao = self.concepts[conceito]
-            response = f"Análise sobre '{conceito.upper()}': {explicacao} O motor próprio da Radamn processou essa definição dinamicamente."
-
-        # Raciocínio 5: Síntese Autônoma para Assuntos Gerais (Dedução Dinâmica)
-        else:
-            palavras_relevantes = [t.capitalize() for t in tokens if len(t) > 3 and t not in ["para", "com", "uma", "sobre"]]
-            
-            if palavras_relevantes:
-                topico = " e ".join(palavras_relevantes[:2])
-                self.memory.last_topic = topico
-                response = (
-                    f"Raciocinando sobre '{topico}': Analisei a sua mensagem sob a perspectiva lógica da Radamn. "
-                    f"O sistema interpretou a intenção do seu comando e está pronto para evoluir esse tópico."
-                )
-            else:
-                response = f"Entendido. A mensagem '{user_input}' foi processada pelo núcleo lógico da Radamn AI com sucesso!"
-
-        # Registrar resposta na memória
         self.memory.add_interaction("assistant", response)
         return response
 
-# Instância única do Motor Cognitivo
-radamn_core = RadamnReasoningEngine()
+# Instância única do Motor Conversacional
+radamn_core = RadamnConversationalEngine()
 
 # =====================================================================
 # ROTAS DA API FASTAPI
@@ -133,7 +167,7 @@ class ChatPayload(BaseModel):
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn Engine Core v3.0 (Autonomous Reasoning)"
+        "engine": "Radamn Engine Core v4.0 (Conversational Engine)"
     }
 
 @app.post("/api/chat")
@@ -151,8 +185,8 @@ async def process_chat(payload: ChatPayload, authorization: Optional[str] = Head
             "media_url": img_url
         }
 
-    # 2. Processamento de Raciocínio Autônomo na IA Própria Radamn
-    resposta_ia = radamn_core.reason_and_synthesize(prompt)
+    # 2. Processamento Conversacional Natural na IA Própria
+    resposta_ia = radamn_core.generate_response(prompt)
 
     return {
         "status": "success",
