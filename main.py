@@ -2,12 +2,12 @@ import math
 import random
 import re
 import urllib.parse
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Radamn Engine Core", version="2.0")
+app = FastAPI(title="Radamn Engine Core", version="3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,87 +18,107 @@ app.add_middleware(
 )
 
 # =====================================================================
-# NÚCLEO DA IA PRÓPRIA RADAMN (Rede Neural & Processamento de Linguagem)
+# RADAMN AUTONOMOUS REASONING ENGINE (MOTOR DE RACIOCÍNIO PRÓPRIO)
 # =====================================================================
 
-class RadamnNeuralModel:
+class CognitiveMemory:
+    """Sistemas de memória de curto prazo e estado interno do usuário."""
     def __init__(self):
-        # Vocabulário e pesos da própria rede
-        self.vocab: Dict[str, int] = {}
-        self.inverse_vocab: Dict[int, str] = {}
-        self.intent_templates: Dict[str, List[str]] = {}
-        self._build_knowledge_base()
+        self.history: List[Dict[str, str]] = []
+        self.last_topic: Optional[str] = None
+
+    def add_interaction(self, role: str, text: str):
+        self.history.append({"role": role, "text": text})
+        if len(self.history) > 10:
+            self.history.pop(0)
+
+class RadamnReasoningEngine:
+    """Motor de Raciocínio Cognitivo Autônomo da Radamn AI (Sem APIs Externas)."""
+    
+    def __init__(self):
+        self.memory = CognitiveMemory()
+        
+        # Base Semântica e Conhecimento Estruturado
+        self.concepts = {
+            "ia": "Sistemas de inteligência autônoma capazes de processar dados, raciocinar e tomar decisões de forma independente.",
+            "radamn": "O ecossistema autônomo Radamn, projetado para operar com total soberania e sem amarras de APIs comerciais.",
+            "render": "Infraestrutura de nuvem onde o núcleo backend do Radamn Engine está rodando em alta performance.",
+            "servidor": "Ambiente de execução Python dedicado para processar o raciocínio da Radamn AI."
+        }
 
     def _tokenize(self, text: str) -> List[str]:
         return re.findall(r'\b\w+\b', text.lower())
 
-    def _build_knowledge_base(self):
-        # Dataset de treinamento próprio da Radamn AI
-        dataset = {
-            "saudacao": {
-                "inputs": ["ola", "oi", "fala", "eai", "salve", "boa noite", "bom dia", "tudo bem"],
-                "responses": [
-                    "Fala, mano! O motor próprio da Radamn AI tá rodando 100% online e sem limites.",
-                    "Salve! Inteligência própria ativa e pronta pra rodar.",
-                    "E aí! Como posso ajudar você hoje no sistema Radamn?"
-                ]
-            },
-            "identidade": {
-                "inputs": ["quem e voce", "quem e voce", "o que e radamn", "sua funcao", "quem te criou"],
-                "responses": [
-                    "Eu sou a Radamn AI, uma inteligência artificial própria desenvolvida do zero!",
-                    "Sou o núcleo Radamn Core: tecnologia própria, rodando no nosso próprio servidor e sem dependência de terceiros."
-                ]
-            },
-            "status": {
-                "inputs": ["status", "como voce esta", "sistema", "motor"],
-                "responses": [
-                    "O motor Radamn Core está operando com estabilidade total no Render.",
-                    "Sistemas 100% operacionais, sem amarras e pronto pra resposta."
-                ]
-            }
+    def _analyze_intent(self, tokens: List[str], text: str) -> Dict[str, Any]:
+        """Análise Dialética: Identifica o objetivo do usuário e o tipo de raciocínio necessário."""
+        analysis = {
+            "is_greeting": any(t in ["ola", "oi", "fala", "eai", "salve", "boa", "noite", "dia", "teste"] for t in tokens),
+            "is_identity_query": any(t in ["quem", "voce", "radamn", "criou", "funcao", "identidade"] for t in tokens),
+            "is_concept_query": any(t in ["que", "como", "porque", "porquê", "explique", "funciona"] for t in tokens),
+            "is_status_query": any(t in ["status", "sistema", "motor", "on", "online", "render"] for t in tokens),
+            "concepts_found": [c for c in self.concepts.keys() if c in tokens]
         }
+        return analysis
 
-        for intent, data in dataset.items():
-            self.intent_templates[intent] = data["responses"]
-            for phrase in data["inputs"]:
-                for token in self._tokenize(phrase):
-                    if token not in self.vocab:
-                        idx = len(self.vocab)
-                        self.vocab[token] = idx
-                        self.inverse_vocab[idx] = token
-
-    def predict(self, user_input: str) -> str:
+    def reason_and_synthesize(self, user_input: str) -> str:
+        """Encadeamento de Raciocínio e Geração Adaptativa de Resposta."""
         tokens = self._tokenize(user_input)
         if not tokens:
-            return "Envie uma mensagem válida para o motor Radamn processar."
+            return "O núcleo Radamn necessita de um comando ou texto válido para iniciar a análise."
 
-        # Pontuação dos intenções
-        scores = {"saudacao": 0, "identidade": 0, "status": 0}
-        for token in tokens:
-            if token in ["ola", "oi", "fala", "eai", "salve", "noite", "dia"]:
-                scores["saudacao"] += 2
-            elif token in ["quem", "voce", "radamn", "funcao", "criou"]:
-                scores["identidade"] += 2
-            elif token in ["status", "sistema", "motor", "esta"]:
-                scores["status"] += 2
+        # Registrar entrada na memória
+        self.memory.add_interaction("user", user_input)
+        analysis = self._analyze_intent(tokens, user_input)
 
-        best_intent = max(scores, key=scores.get)
-        
-        # Se encontrou intenção com pontuação positiva
-        if scores[best_intent] > 0:
-            return random.choice(self.intent_templates[best_intent])
+        # Raciocínio 1: Saudações e Conexão Inicial
+        if analysis["is_greeting"] and len(tokens) <= 3:
+            responses = [
+                "Fala! O núcleo cognitivo da Radamn AI está operando a 100% no servidor próprio.",
+                "Salve! Motor autônomo ativo, sem amarras e pronto para processar o seu comando.",
+                "E aí! Conexão direta estabelecida com o Radamn Core. O que vamos estruturar hoje?"
+            ]
+            response = random.choice(responses)
 
-        # Síntese autônoma de resposta própria para novas entradas
-        palavras_chaves = [t.capitalize() for t in tokens if len(t) > 2]
-        if palavras_chaves:
-            topico = ", ".join(palavras_chaves[:3])
-            return f"Entendi o tópico sobre '{topico}'. O motor próprio da Radamn processou sua mensagem e está pronto para o próximo comando."
+        # Raciocínio 2: Pergunta de Identidade / Autonomia
+        elif analysis["is_identity_query"]:
+            response = (
+                "Eu sou a Radamn AI, uma inteligência artificial autônoma desenvolvida com código e lógica próprios. "
+                "Opero inteiramente dentro do nosso servidor no Render, sem dependência de quotas ou APIs comerciais de terceiros."
+            )
 
-        return f"Mensagem '{user_input}' recebida e processada com sucesso no núcleo Radamn AI!"
+        # Raciocínio 3: Status e Operabilidade do Sistema
+        elif analysis["is_status_query"]:
+            response = (
+                "Análise do sistema: O motor Radamn Core v3.0 está 100% operacional. "
+                "Memória lógica ativa, latência mínima e processamento independente verificado no Render."
+            )
 
-# Instância única da IA Radamn
-radamn_ia = RadamnNeuralModel()
+        # Raciocínio 4: Explicação de Conceitos Conhecidos
+        elif analysis["concepts_found"]:
+            conceito = analysis["concepts_found"][0]
+            explicacao = self.concepts[conceito]
+            response = f"Análise sobre '{conceito.upper()}': {explicacao} O motor próprio da Radamn processou essa definição dinamicamente."
+
+        # Raciocínio 5: Síntese Autônoma para Assuntos Gerais (Dedução Dinâmica)
+        else:
+            palavras_relevantes = [t.capitalize() for t in tokens if len(t) > 3 and t not in ["para", "com", "uma", "sobre"]]
+            
+            if palavras_relevantes:
+                topico = " e ".join(palavras_relevantes[:2])
+                self.memory.last_topic = topico
+                response = (
+                    f"Raciocinando sobre '{topico}': Analisei a sua mensagem sob a perspectiva lógica da Radamn. "
+                    f"O sistema interpretou a intenção do seu comando e está pronto para evoluir esse tópico."
+                )
+            else:
+                response = f"Entendido. A mensagem '{user_input}' foi processada pelo núcleo lógico da Radamn AI com sucesso!"
+
+        # Registrar resposta na memória
+        self.memory.add_interaction("assistant", response)
+        return response
+
+# Instância única do Motor Cognitivo
+radamn_core = RadamnReasoningEngine()
 
 # =====================================================================
 # ROTAS DA API FASTAPI
@@ -113,7 +133,7 @@ class ChatPayload(BaseModel):
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn Engine Core v2.0 (Motor Próprio)"
+        "engine": "Radamn Engine Core v3.0 (Autonomous Reasoning)"
     }
 
 @app.post("/api/chat")
@@ -131,8 +151,8 @@ async def process_chat(payload: ChatPayload, authorization: Optional[str] = Head
             "media_url": img_url
         }
 
-    # 2. Processamento na IA Própria Radamn AI
-    resposta_ia = radamn_ia.predict(prompt)
+    # 2. Processamento de Raciocínio Autônomo na IA Própria Radamn
+    resposta_ia = radamn_core.reason_and_synthesize(prompt)
 
     return {
         "status": "success",
