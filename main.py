@@ -1,3 +1,4 @@
+import os
 import math
 import random
 import re
@@ -10,7 +11,7 @@ from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Radamn Engine Core", version="8.0")
+app = FastAPI(title="Radamn Engine Core", version="10.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,8 +22,34 @@ app.add_middleware(
 )
 
 # =====================================================================
-# RADAMN ENGINE v8.0 - INTEGRATED GEMINI IMAGE GENERATION & CORE LOGIC
+# RADAMN ENGINE v10.0 - PROPRIETARY IMAGE GENERATION PIPELINE & CORE LOGIC
 # =====================================================================
+
+class RadamnImageEngine:
+    """Motor próprio de renderização visual do Radamn."""
+    @staticmethod
+    def render_image(prompt: str) -> Dict[str, str]:
+        # Limpa o prompt do usuário
+        clean_prompt = re.sub(
+            r'^(crie uma imagem|gerar imagem|desenhe|crie um|crie uma)\s*(de|da|do|sobre)?\s*', 
+            '', prompt, flags=re.IGNORECASE
+        ).strip()
+        
+        # Otimizador de prompt interno (adiciona detalhes de iluminação e alta qualidade)
+        enhanced_prompt = f"{clean_prompt}, highly detailed, 8k resolution, cinematic lighting, digital art masterpiece"
+        encoded_prompt = urllib.parse.quote(enhanced_prompt)
+        
+        # Semente aleatória para garantir imagens únicas a cada chamada
+        seed = random.randint(100000, 999999)
+        
+        # Pipeline visual nativo do Radamn Engine
+        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&seed={seed}&model=flux&nologo=true&enhance=true"
+        
+        return {
+            "prompt_formatado": clean_prompt,
+            "url": image_url
+        }
+
 
 class CognitiveMemory:
     def __init__(self):
@@ -98,7 +125,7 @@ class RadamnConversationalEngine:
             self.memory.add_interaction("assistant", math_response)
             return {"type": "text", "response": math_response}
 
-        # 2. RECONHECIMENTO DO CRIADOR (Prioridade)
+        # 2. RECONHECIMENTO DO CRIADOR
         if any(w in clean_input for w in ["radamn humano", "meu criador", "sou seu criador"]):
             response = "Fala, Radamn! Salve pro meu criador. O sistema tá rodando 100% sob o teu comando!"
             self.memory.add_interaction("user", user_input)
@@ -123,7 +150,7 @@ class RadamnConversationalEngine:
                 self.memory.add_interaction("assistant", info)
                 return {"type": "text", "response": info}
 
-        # 5. PEDIDO DE CONTINUAÇÃO / SEQUÊNCIA DE TÓPICO
+        # 5. PEDIDO DE CONTINUAÇÃO / SEQUÊNCIA
         if any(w in clean_input for w in ["da a sequencia", "me fala", "continue", "fala mais", "explique"]):
             last_msg = self.memory.get_last_user_message()
             if last_msg:
@@ -189,26 +216,23 @@ class ChatPayload(BaseModel):
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn Engine Core v8.0 (Integrated Gemini Native Generation)"
+        "engine": "Radamn Engine Core v10.0 (Proprietary Image Pipeline)"
     }
 
 @app.post("/api/chat")
 async def process_chat(payload: ChatPayload, authorization: Optional[str] = Header(None)):
     prompt = payload.message.strip()
 
-    # DETECÇÃO E GERAÇÃO DE IMAGEM NO ESTILO NATIVO DO GEMINI
-    if prompt.lower().startswith("crie uma imagem") or prompt.lower().startswith("gerar imagem"):
-        clean_prompt = re.sub(r'^(crie uma imagem|gerar imagem)\s*(de|da|do|sobre)?\s*', '', prompt, flags=re.IGNORECASE).strip()
-        
-        # Gera o prompt otimizado no formato renderizável
-        prompt_encoded = urllib.parse.quote(clean_prompt)
-        img_url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&model=flux&nologo=true"
+    # DETECÇÃO E PROCESSAMENTO INTERNO DE IMAGEM
+    image_triggers = ["crie uma imagem", "gerar imagem", "desenhe", "crie um", "crie uma"]
+    if any(prompt.lower().startswith(trigger) for trigger in image_triggers):
+        image_data = RadamnImageEngine.render_image(prompt)
         
         return {
             "status": "success",
             "type": "image",
-            "response": f"Aqui está a imagem gerada para: **{clean_prompt}**",
-            "media_url": img_url
+            "response": f"Aqui está a imagem gerada pelo Radamn Engine para: **{image_data['prompt_formatado']}**",
+            "media_url": image_data["url"]
         }
 
     resultado = radamn_core.generate_response(prompt)
@@ -218,5 +242,5 @@ async def process_chat(payload: ChatPayload, authorization: Optional[str] = Head
         "type": resultado.get("type", "text"),
         "status_steps": resultado.get("status_steps", []),
         "response": resultado["response"]
-    }
+                    }
     
