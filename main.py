@@ -11,7 +11,7 @@ from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="Radamn Engine Core", version="10.0")
+app = FastAPI(title="Radamn Engine Core", version="11.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,11 +22,11 @@ app.add_middleware(
 )
 
 # =====================================================================
-# RADAMN ENGINE v10.0 - PROPRIETARY IMAGE GENERATION PIPELINE & CORE LOGIC
+# RADAMN ENGINE v11.0 - HIGH-RESOLUTION NO-WATERMARK IMAGE PIPELINE
 # =====================================================================
 
 class RadamnImageEngine:
-    """Motor próprio de renderização visual do Radamn."""
+    """Motor de renderização em alta definição sem marca d'água do Radamn."""
     @staticmethod
     def render_image(prompt: str) -> Dict[str, str]:
         # Limpa o prompt do usuário
@@ -35,15 +35,20 @@ class RadamnImageEngine:
             '', prompt, flags=re.IGNORECASE
         ).strip()
         
-        # Otimizador de prompt interno (adiciona detalhes de iluminação e alta qualidade)
-        enhanced_prompt = f"{clean_prompt}, highly detailed, 8k resolution, cinematic lighting, digital art masterpiece"
+        # Otimizador de renderização ultra-detalhada em alta resolução
+        enhanced_prompt = (
+            f"{clean_prompt}, masterpiece, highly detailed 8k resolution, "
+            f"cinematic lighting, photorealistic, sharp focus, clean background, no watermark, no text"
+        )
         encoded_prompt = urllib.parse.quote(enhanced_prompt)
         
-        # Semente aleatória para garantir imagens únicas a cada chamada
-        seed = random.randint(100000, 999999)
+        seed = random.randint(1000000, 9999999)
         
-        # Pipeline visual nativo do Radamn Engine
-        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&seed={seed}&model=flux&nologo=true&enhance=true"
+        # Pipeline limpo: sem marca d'água (nologo=true & no-watermark) e resolução 1280x1280
+        image_url = (
+            f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+            f"?width=1280&height=1280&seed={seed}&model=flux-realism&nologo=true&private=true&enhance=true"
+        )
         
         return {
             "prompt_formatado": clean_prompt,
@@ -216,7 +221,7 @@ class ChatPayload(BaseModel):
 def status():
     return {
         "status": "Online", 
-        "engine": "Radamn Engine Core v10.0 (Proprietary Image Pipeline)"
+        "engine": "Radamn Engine Core v11.0 (HD No-Watermark Pipeline)"
     }
 
 @app.post("/api/chat")
@@ -242,5 +247,5 @@ async def process_chat(payload: ChatPayload, authorization: Optional[str] = Head
         "type": resultado.get("type", "text"),
         "status_steps": resultado.get("status_steps", []),
         "response": resultado["response"]
-                    }
+    }
     
